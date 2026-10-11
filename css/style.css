@@ -115,17 +115,38 @@ html, body {
 }
 .zoom-tag { color: var(--accent); font-weight: 700; }
 
-/* ==================== 目标面板 ==================== */
-.quest-panel { left: 18px; bottom: 18px; min-width: 214px; }
-.quest-title {
-  font-size: 11px; font-weight: 800; color: var(--text-dim);
-  letter-spacing: 2px; padding-bottom: 7px; margin-bottom: 7px;
-  border-bottom: 1px dashed var(--line-strong);
+/* ==================== 目标面板 ====================
+   从"白色玻璃卡片"改成了"纯文字浮层"：
+   · 背景全透明（去掉底色 / 边框 / 投影），不再在画面上压出一块白板
+   · 行距、内边距、标题下方留白全部收紧，整块面积比之前小一半以上
+   · 标签不再用 flex:1 顶到面板两端，数值紧跟在标签后面
+   因为底衬没了，文字统一改成浅色 + 投影，雪原 / 沙滩这类亮地形上也读得清。
+*/
+.quest-panel {
+  left: 14px; bottom: 14px;
+  min-width: 0;
+  width: 200px;
+  max-width: calc(100vw - 28px);
+  padding: 2px 4px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(8, 24, 34, .78), 0 0 8px rgba(8, 24, 34, .5);
 }
-.quest-list { list-style: none; display: flex; flex-direction: column; gap: 7px; }
-.quest-list li { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
-.quest-list li span { flex: 1; color: var(--text-dim); }
-.quest-list li b { font-size: 13px; color: var(--text); font-variant-numeric: tabular-nums; }
+.quest-title {
+  font-size: 10.5px; font-weight: 800; color: rgba(255, 255, 255, .94);
+  letter-spacing: 1.2px; padding-bottom: 3px; margin-bottom: 3px;
+  border-bottom: 1px dashed rgba(255, 255, 255, .4);
+}
+.quest-list { list-style: none; display: flex; flex-direction: column; gap: 1px; }
+.quest-list li { display: flex; align-items: center; gap: 6px; font-size: 12px; line-height: 1.22; }
+/* 数值不再被推到面板右端：给标签一个刚好放得下 4 个字的最小宽度，
+   后面的 b 就紧贴着它排，标签↔数值的距离从 ~350px 收到 ~6px。 */
+.quest-list li span { flex: 0 0 auto; min-width: 4.4em; color: rgba(255, 255, 255, .88); }
+.quest-list li b { font-size: 12.5px; color: #fff; font-variant-numeric: tabular-nums; }
 .ico { width: 15px; height: 15px; border-radius: 4px; flex: 0 0 auto; display: inline-block; }
 .orb-ico { background: linear-gradient(140deg, #8ff5e8, #16a99b); border-radius: 50%; }
 .chest-ico { background: linear-gradient(140deg, #ffd07a, #c8861d); }
@@ -147,16 +168,22 @@ html, body {
   border-radius: 50%;
   box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, .5);
 }
-.loot-title { margin-top: 10px; }
+.loot-title { margin-top: 6px; }
+/* 已探索：和列表一样"标签 + 数值紧挨着"，不再一左一右拉到两端。
+   左边补 21px＝图标宽(15) + 行内间距(6)，让这一行的文字和上下的列表项对齐。 */
 .travel {
-  margin-top: 9px; padding-top: 8px; border-top: 1px dashed var(--line-strong);
-  display: flex; justify-content: space-between; font-size: 12px; color: var(--text-dim);
+  margin-top: 4px; padding: 4px 0 0 21px;
+  border-top: 1px dashed rgba(255, 255, 255, .4);
+  display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: rgba(255, 255, 255, .88);
 }
-.travel b { color: var(--amber); font-variant-numeric: tabular-nums; }
-.region-list { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.travel span { min-width: 4.6em; }
+.travel b { color: #ffd88a; font-variant-numeric: tabular-nums; }
+.region-list { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 6px; }
+/* 生物群系色卡自带浅色底，所以文字投影要关掉，否则小字会糊成一团 */
 .region-list span {
-  font-size: 10px; padding: 2px 7px; border-radius: 7px;
-  background: var(--accent-soft); color: #0d6d67; font-weight: 600;
+  font-size: 9.5px; padding: 1px 5px; border-radius: 6px;
+  background: rgba(216, 242, 238, .82); color: #0d6d67; font-weight: 600;
+  text-shadow: none;
 }
 
 /* ==================== 交互提示 ==================== */
@@ -424,7 +451,7 @@ kbd {
   .map-panel { width: 158px; padding: 8px; }
   .minimap-wrap, #minimap { width: 142px; height: 142px; }
   .status-panel { min-width: 210px; padding: 9px; }
-  .quest-panel { min-width: 0; padding: 9px; }
+  .quest-panel { width: 176px; padding: 2px 4px; }
   .quest-list li span { display: none; }
   .toasts { top: auto; bottom: 150px; }
   .help-grid { grid-template-columns: 1fr; }

@@ -54,6 +54,51 @@ export function mergeGeoms(geoms) {
 }
 
 /**
+ * 复制一份"**缠绕方向相反**"的同位置几何体 —— 让单层面片正反两面都可见。
+ *
+ * 为什么需要它：植被有两种材质（world.js）
+ *   · grassMaterial → `side: DoubleSide`，草 / 芦苇 / 花用它，怎么拍都在；
+ *   · propMaterial  → **`FrontSide`**（默认），树 / 石头用它。
+ * 棕榈叶是单层 PlaneGeometry 面片，用的是 propMaterial —— 于是从下往上看
+ * （站在树下的常规视角）整圈叶子全被背面剔除，棕榈树就只剩一根光杆子，
+ * 玩家看到的就是"这树怎么没有树叶，光秃秃的"。
+ *
+ * 这里不是把整个 prop 材质改成 DoubleSide（那会让所有树石都白跑一倍填充率），
+ * 而是只给棕榈叶多叠一层缠绕翻转的副本：占据完全相同的空间，
+ * 但法线朝外、正面朝另一边。片数只加在棕榈身上。
+ */
+export function flipWinding(geo) {
+  const g = geo.clone();
+  if (g.index) {
+    // 索引几何：每个三角形把首尾顶点对调即可反转缠绕
+    const idx = g.index.array;
+    for (let t = 0; t < idx.length; t += 3) {
+      const tmp = idx[t]; idx[t] = idx[t + 2]; idx[t + 2] = tmp;
+    }
+    g.index.needsUpdate = true;
+  } else {
+    // 非索引几何：直接在数组里对调每个三角形的首尾顶点
+    for (const name of ['position', 'normal']) {
+      const at = g.attributes[name];
+      if (!at) continue;
+      const arr = at.array, s = at.itemSize;
+      for (let t = 0; t < arr.length; t += s * 3) {
+        for (let k = 0; k < s; k++) {
+          const tmp = arr[t + k]; arr[t + k] = arr[t + 2 * s + k]; arr[t + 2 * s + k] = tmp;
+        }
+      }
+      at.needsUpdate = true;
+    }
+  }
+  const n = g.attributes.normal;
+  if (n) {
+    for (let i = 0; i < n.count; i++) n.setXYZ(i, -n.getX(i), -n.getY(i), -n.getZ(i));
+    n.needsUpdate = true;
+  }
+  return g;
+}
+
+/**
  * 以"空间方向"为种子做径向扰动，把球状几何揉成不规则的岩石。
  *
  * ⚠️ 这里必须用**方向**而不是**顶点下标**当随机种子。
@@ -204,7 +249,11 @@ export function makePalm({ height = 9, radial = 6 } = {}) {
     f.rotateX(-Math.PI / 2.35);
     f.rotateY(a);
     f.translate(x + Math.cos(a) * len * 0.44, y + height * 0.015, Math.sin(a) * len * 0.44);
-    parts.push(paint(f, i % 2 ? 0x3f8b4a : 0x357a41, 0.18));
+    const leaf = i % 2 ? 0x3f8b4a : 0x357a41;
+    parts.push(paint(f, leaf, 0.18));
+    // ⚠️ 叶子是单层面片，材质又是单面渲染 —— 必须再叠一层缠绕翻转的副本，
+    //    否则从树下往上看整圈叶子全被剔除，棕榈就成了一根光杆（详见 flipWinding）。
+    parts.push(paint(flipWinding(f), leaf, 0.18));
   }
   // 椰子
   for (let i = 0; i < 3; i++) {
@@ -250,22 +299,94 @@ export function makeCactus({ height = 3.4 } = {}) {
   return mergeGeoms(parts);
 }
 
-/* ---------------- 枯树（沼泽 / 荒原） ---------------- */
-export function makeDeadTree({ height = 5.0 } = {}) {
+/* ---------------- 苍劲乔木（沙漠 / 沼泽） ----------------
+ * 这里原本是"枯树"：一根树干 + 几根光秃秃的枝丫，没有叶子。
+ * 放在沙漠里当点缀还行，但沼泽是按 9% 的密度撒它的 —— 走过去就是
+ * 一整片没有叶子的枯木林，观感很糟（"树都没有树叶，光秃秃的"）。
+ *
+ * 现在改成有叶的乔木：
+ *   · 枝丫用 limb() 沿一个**朝外上方**的方向真正长出去。旧版的枝丫是
+ *     rotateZ(61°) 之后又平移回轴心附近，末端其实朝内收，几根枝子交叉
+ *     在主干上，像乱搭的梯子 —— 这也是"枯枝"看起来那么假的原因。
+ *   · 每根枝头挂一团叶子，树顶再补一层主冠，整棵树"苍劲但枝繁叶茂"。
+ *   · 沙漠 / 沼泽只是换 leafColor 与 leaf，一个旱生黄绿、一个湿生浓绿。
+ *
+ * 建模过程在"单位高"下完成，最后整体 scale(height) —— 这样 height
+ * 就是实打实的树高，跟 PROP_METRICS 里的避障尺寸对得上。
+ */
+export function makeGnarledTree({
+  height = 5.2,
+  bark = 0x6a5a48,
+  rootBark = 0x574838,
+  leafColor = 0x6f9445,
+  leafColor2 = 0x86ab55,
+  leaf = 1.0,
+  branches = 6,
+} = {}) {
   const parts = [];
-  const trunk = new THREE.CylinderGeometry(height * 0.042, height * 0.095, height, 6, 2);
-  trunk.translate(0, height / 2, 0);
-  parts.push(paint(trunk, 0x6a5a48, 0.16));
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2 + 0.6;
-    const len = height * (0.28 + (i % 3) * 0.10);
-    const br = new THREE.CylinderGeometry(height * 0.012, height * 0.030, len, 4, 1);
-    br.rotateZ(Math.PI * (0.34 + (i % 2) * 0.12));
-    br.rotateY(a);
-    br.translate(Math.cos(a) * height * 0.13, height * (0.52 + i * 0.075), Math.sin(a) * height * 0.13);
-    parts.push(paint(br, 0x6a5a48, 0.16));
+  const Y = new THREE.Vector3(0, 1, 0);
+
+  /** 从 from 点沿 dir 长出一段树枝，返回枝头的坐标（用来挂叶子） */
+  const limb = (from, dir, len, rBase, rTip) => {
+    const d = dir.clone().normalize();
+    const g = new THREE.CylinderGeometry(rTip, rBase, len, 4, 1);
+    g.translate(0, len / 2, 0);                       // 把底面挪到原点，方便按起点对齐
+    g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(Y, d));
+    g.translate(from.x, from.y, from.z);
+    parts.push(paint(g, bark, 0.16));
+    return d.multiplyScalar(len).add(from);
+  };
+
+  const trunkH = 0.66;
+  const trunk = new THREE.CylinderGeometry(0.032, 0.080, trunkH, 6, 2);
+  trunk.translate(0, trunkH / 2, 0);
+  parts.push(paint(trunk, bark, 0.16));
+  // 根部外扩：孤树站在沙地 / 泥地上不至于像根插进去的柱子
+  const root = new THREE.CylinderGeometry(0.080, 0.115, 0.05, 6, 1);
+  root.translate(0, 0.025, 0);
+  parts.push(paint(root, rootBark, 0.16));
+
+  for (let i = 0; i < branches; i++) {
+    const a = (i / branches) * Math.PI * 2 + 0.55;
+    const spread = 0.62 + (i % 3) * 0.18;             // 水平张开程度
+    const from = new THREE.Vector3(
+      Math.cos(a) * 0.012,
+      trunkH * (0.60 + (i % 4) * 0.11),
+      Math.sin(a) * 0.012,
+    );
+    // dir 的 y 分量为正 → 一律斜向上长，不会再往主干里折
+    const dir = new THREE.Vector3(Math.cos(a) * spread, 0.80, Math.sin(a) * spread);
+    const len = 0.30 + (i % 3) * 0.075;
+    const tip = limb(from, dir, len, 0.022, 0.009);
+
+    const r = 0.105 * leaf * (0.85 + (i % 3) * 0.15);
+    const blob = new THREE.IcosahedronGeometry(r, 0);
+    blob.scale(1, 0.82, 1);
+    blob.rotateY(i * 1.9);
+    blob.translate(tip.x, tip.y + r * 0.22, tip.z);
+    parts.push(paint(blob, i % 2 ? leafColor : leafColor2, 0.2));
   }
-  return mergeGeoms(parts);
+
+  // 主冠：树顶再压三团，免得中间空一截、看着像被削了头
+  const cr = 0.17 * leaf;
+  const tops = [
+    [0, 0.72, 0, 1.0],
+    [cr * 0.55, 0.66, cr * 0.32, 0.70],
+    [-cr * 0.50, 0.68, -cr * 0.34, 0.64],
+  ];
+  for (let i = 0; i < tops.length; i++) {
+    const [x, y, z, s] = tops[i];
+    const g = new THREE.IcosahedronGeometry(cr * s, 0);
+    g.scale(1, 0.82, 1);
+    g.rotateY(i * 1.4);
+    g.translate(x, y, z);
+    parts.push(paint(g, i % 2 ? leafColor : leafColor2, 0.2));
+  }
+
+  const geo = mergeGeoms(parts);
+  geo.scale(height, height, height);
+  geo.computeBoundingSphere();
+  return geo;
 }
 
 /* ---------------- 灌木（增加林下层次） ---------------- */
@@ -362,13 +483,26 @@ export function makeFlower({ color = 0xff7fa8 } = {}) {
   return upNormals(mergeGeoms([paint(stem, 0x5f8f47, 0.1), paint(head, color, 0.15)]));
 }
 
-/** 芦苇（沼泽） */
+/** 芦苇（沼泽）
+ *  旧版是 4 片并排、等高等距的竖直面片，远看就是一道绿色栅栏 / 条形码。
+ *  现在改成自根部散开的芦丛：每片叶绕轴均匀分布，越往上越往外弯垂，
+ *  叶尖变窄 —— 和 makeGrassTuft 的思路一致，只是更高、更弯。 */
 export function makeReed({ height = 1.3 } = {}) {
   const parts = [];
-  for (let i = 0; i < 4; i++) {
-    const g = new THREE.PlaneGeometry(0.09, height * (0.7 + i * 0.1));
-    g.translate((i - 1.5) * 0.13, height * 0.4, 0);
-    parts.push(paint(g, 0x7d9354, 0.2));
+  const blades = 6;
+  for (let i = 0; i < blades; i++) {
+    const a = (i / blades) * Math.PI * 2 + 0.4;
+    const h = height * (0.66 + ((i * 5) % 4) * 0.11);
+    const g = new THREE.PlaneGeometry(0.062, h, 1, 3);
+    const pos = g.attributes.position;
+    for (let v = 0; v < pos.count; v++) {
+      const t = (pos.getY(v) + h / 2) / h;            // 0 = 根，1 = 梢
+      const bend = t * t * height * 0.42;             // 越往上越往外弯
+      pos.setX(v, pos.getX(v) * (1 - t * 0.8) + bend * Math.cos(a));
+      pos.setZ(v, bend * Math.sin(a));
+      pos.setY(v, t * h);
+    }
+    parts.push(paint(g, i % 2 ? 0x7d9354 : 0x8ba25c, 0.2));
   }
   return upNormals(mergeGeoms(parts));
 }

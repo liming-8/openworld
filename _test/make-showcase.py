@@ -77,7 +77,9 @@ save(load_worldmap(), 'worldmap.png')
 print('\n=== 生物群系图鉴 ===')
 TILES = [
     ('grassland-b-clean.png', '风起平原', 'GRASSLAND'),
-    ('forest-b-clean.png',    '低语林地', 'FOREST'),
+    # 林地用 a 机位：b 机位虽然也合规，但镜头正好贴在一棵大松树上，
+    # 树干占掉右半张图，完全看不出"林地"；a 机位是林子内部，树冠层次最全。
+    ('forest-a-clean.png',    '低语林地', 'FOREST'),
     ('desert-a-clean.png',    '烫金流沙', 'DESERT'),
     ('snow-b-clean.png',      '极寒雪原', 'SNOW'),
     ('beach-b-clean.png',     '珊瑚浅滩', 'BEACH'),

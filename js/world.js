@@ -38,13 +38,15 @@ const PROP_METRICS = {
   broadleaf: { h: 8.8, r: 0.7 },
   broadleafTall: { h: 13.5, r: 0.85 },
   palm: { h: 9.0, r: 0.5 },
+  aridTree: { h: 5.4, r: 0.85 },
+  swampTree: { h: 6.4, r: 1.0 },
   boulder: { h: 2.6, r: 2.4 },
   rock: { h: 1.3, r: 1.25 },
 };
 
 /** 需要贴合地形法线站立的植被（避免在坡地上歪倒 / 陷入地面） */
 const ALIGN_TO_GROUND = new Set([
-  'pine', 'pineSnow', 'broadleaf', 'broadleafTall', 'palm', 'dead', 'cactus', 'bush', 'bushSmall',
+  'pine', 'pineSnow', 'broadleaf', 'broadleafTall', 'palm', 'aridTree', 'swampTree', 'cactus', 'bush', 'bushSmall',
 ]);
 
 export class World {
@@ -86,7 +88,14 @@ export class World {
     this.geoCache.broadleafTall = P.makeBroadleaf({ height: 11.0, radial: 8 });
     this.geoCache.palm = P.makePalm({ height: 9.0 });
     this.geoCache.cactus = P.makeCactus({ height: 3.6 });
-    this.geoCache.dead = P.makeDeadTree({ height: 5.2 });
+    // 原来这里只有一棵"枯树"，沙漠和沼泽共用 —— 现在拆成两种有叶的乔木：
+    // 沙漠用旱生黄绿、树形偏矮；沼泽用湿生浓绿、树形更高更密。
+    this.geoCache.aridTree = P.makeGnarledTree({
+      height: 5.4, leaf: 0.86, leafColor: 0x7f924e, leafColor2: 0x99a962,
+    });
+    this.geoCache.swampTree = P.makeGnarledTree({
+      height: 6.4, leaf: 1.16, branches: 7, leafColor: 0x4f8a3d, leafColor2: 0x6ba24a,
+    });
     // 岩石半径按"主石半径"解释：rock ≈ 1.2m 主石，boulder ≈ 2.1m 主石
     this.geoCache.rock = P.makeRockCluster({ size: 1.15, count: 3, detail: 0 });
     this.geoCache.boulder = P.makeRockCluster({ size: 2.1, count: 3, detail: 1, seedish: 1.7 });
@@ -342,7 +351,7 @@ export class World {
           case 'DESERT': {
             if (roll < 0.045 * T) { key = 'cactus'; scale = 0.8 + rand() * 0.7; }
             else if (small && roll < 0.10) { key = 'rock'; scale = 0.5 + rand() * 0.9; }
-            else if (small && roll < 0.125) { key = 'dead'; scale = 0.7 + rand() * 0.5; }
+            else if (small && roll < 0.125) { key = 'aridTree'; scale = 0.7 + rand() * 0.5; }
             else if (wantGrass && rand() < 0.25) { kind = 'grass'; key = 'grassTall'; }
             break;
           }
@@ -363,7 +372,7 @@ export class World {
             break;
           }
           case 'SWAMP': {
-            if (roll < 0.09 * T) { key = 'dead'; scale = 0.8 + rand() * 0.6; }
+            if (roll < 0.09 * T) { key = 'swampTree'; scale = 0.8 + rand() * 0.6; }
             else if (wantGrass && roll < 0.5) { kind = 'grass'; key = 'reed'; }
             break;
           }

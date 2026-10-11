@@ -26,6 +26,13 @@ const W = 1600, H = 900;
 const ONLY = (process.env.ONLY || '').split(',').map((s) => s.trim()).filter(Boolean);
 const want_ = (k) => ONLY.length === 0 || ONLY.includes(k);
 
+// 换用第 N 个候选点：`SPOT_INDEX=BEACH:1,FOREST:2`。
+// 有些群系的首选点位本身合规，但镜头正好贴在一棵树上（树干占掉半张图），
+// 换一个候选重拍就行 —— 不必去动搜点规则。
+const SPOT_INDEX = (process.env.SPOT_INDEX || '').split(',')
+  .map((s) => s.split(':'))
+  .reduce((m, [k, v]) => { if (k && v) m[k.trim().toUpperCase()] = Number(v); return m; }, {});
+
 const browser = await chromium.launch({
   executablePath: EXE, headless: true,
   args: ['--use-angle=swiftshader', '--use-gl=angle', '--enable-unsafe-swiftshader', '--no-sandbox'],
@@ -55,6 +62,22 @@ const spots = await page.evaluate(() => {
     HIGHLAND: [0.55, 999], MOUNTAIN: [0.95, 999], OCEAN: [9, 999],
   };
   const want = Object.keys(LIMIT).filter((k) => k !== 'OCEAN');
+  // 每个群系"允许出现在取景点周围"的邻居。
+  // 图鉴里踩过这个坑：沙滩那一格其实是站在滩涂边缘朝雪山拍的，
+  // 整格几乎全是雪 —— 所以取景点必须落在"自己这个群系成片"的地方，
+  // 而不是站在两种群系的交界线上。
+  const OK_NEIGHBOURS = {
+    GRASSLAND: ['GRASSLAND', 'FOREST', 'BEACH', 'SWAMP'],
+    FOREST: ['FOREST', 'GRASSLAND', 'HIGHLAND', 'SWAMP'],
+    DESERT: ['DESERT', 'BEACH', 'GRASSLAND'],
+    SNOW: ['SNOW', 'MOUNTAIN', 'HIGHLAND'],
+    SWAMP: ['SWAMP', 'GRASSLAND', 'FOREST', 'BEACH'],
+    BEACH: ['BEACH', 'OCEAN', 'GRASSLAND', 'DESERT'],
+    HIGHLAND: ['HIGHLAND', 'MOUNTAIN', 'GRASSLAND', 'FOREST', 'SNOW'],
+    MOUNTAIN: ['MOUNTAIN', 'HIGHLAND', 'SNOW'],
+  };
+  const NS = 44;          // 邻居采样半径（米）
+  const NEI = [[-NS, 0], [NS, 0], [0, -NS], [0, NS], [-NS, -NS], [NS, NS], [-NS, NS], [NS, -NS]];
   const found = {};
   for (let x = -900; x <= 900; x += 24) {
     for (let z = -900; z <= 900; z += 24) {
@@ -64,8 +87,17 @@ const spots = await page.evaluate(() => {
       const s = t.slope(x, z);
       const h = t.height(x, z);
       if (s > sMax || h < 0.5 || h > hMax) continue;
+      // 周围 8 个方向至少 6 个是自己的同类
+      const okSet = OK_NEIGHBOURS[b.id];
+      if (okSet) {
+        let good = 0;
+        for (const [dx, dz] of NEI) {
+          if (okSet.includes(t.biome(x + dx, z + dz).id)) good++;
+        }
+        if (good < 6) continue;
+      }
       const list = found[b.id] || (found[b.id] = []);
-      if (list.length >= 24) continue;
+      if (list.length >= 48) continue;
       list.push({ x, z, s: +s.toFixed(3), h: +h.toFixed(1) });
     }
   }
@@ -154,7 +186,7 @@ const CLEAN = process.env.SET_HUD === '0';
 if (CLEAN) await page.evaluate(() => window.__game.ui.setHUD(false));
 for (const [biome, list] of Object.entries(spots)) {
   console.log(`\n--- ${biome} ---`);
-  const best = list[0];
+  const best = list[Math.min(SPOT_INDEX[biome] || 0, list.length - 1)];
   for (const [suffix, yaw, pitch, dist] of ANGLES) {
     await frame(best.x, best.z, yaw, pitch, dist);
     const tag = await shoot(`${biome.toLowerCase()}-${suffix}${CLEAN ? '-clean' : ''}`);
