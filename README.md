@@ -9,6 +9,11 @@
 
 ## 一、怎么运行
 
+```bash
+git clone https://github.com/liming-8/openworld.git
+cd openworld
+```
+
 游戏使用 ES Module，**必须通过本地服务器打开**（直接双击 `index.html` 浏览器会拦截模块加载）。
 
 ### 方式 1：一键启动（推荐）
@@ -16,6 +21,7 @@
 双击项目根目录的 **`start-game.bat`**，浏览器会自动打开游戏。
 
 脚本会依次尝试 Node.js → Python 来起一个本地服务器，端口 `8080`。
+（macOS / Linux 下同理，直接跑 `node serve.mjs 8080` 即可。）
 
 ### 方式 2：手动启动
 
@@ -32,6 +38,9 @@ python -m http.server 8080 --bind 127.0.0.1
 ### 方式 3：任意静态服务器
 
 放进 Nginx / VSCode Live Server / `npx serve` 都能跑，纯静态无后端。
+
+**依赖**：Three.js r160 已经内置在 `libs/three.module.js`（1.3 MB），
+**没有 npm 依赖、无需 `npm install`、断网也能玩**。
 
 **环境要求**：支持 WebGL2 的现代浏览器（Chrome / Edge / Firefox / Safari 均可），
 首次进入需等待约 1～3 秒生成世界。
@@ -129,35 +138,63 @@ python -m http.server 8080 --bind 127.0.0.1
 
 ```
 openworld/
-├── index.html          入口页面（HUD / 菜单结构）
-├── start-game.bat      Windows 一键启动
-├── serve.mjs           零依赖本地静态服务器
+├── index.html            入口页面（HUD / 菜单结构）
+├── start-game.bat        Windows 一键启动
+├── serve.mjs             零依赖本地静态服务器
 ├── package.json
-├── css/style.css       全部界面样式
-├── js/                 游戏逻辑（见上表）
+├── README.md
+├── .gitignore            忽略 _test 下的截图产物（可由脚本重新生成）
+├── .gitattributes        统一换行符：仓库内 LF，*.bat 用 CRLF
+├── css/style.css         全部界面样式
+├── js/                   游戏逻辑（见上表）
 ├── libs/three.module.js  Three.js r160（已本地化，可离线运行）
-└── _test/              开发期自动化测试与截图（可删除）
-    ├── run.mjs         端到端跑图测试（Playwright，自动截图）
-    ├── verify.mjs      已修问题的回归验证（方向 / 防卡 / 穿模 / 贴地 / 模型）
-    ├── ui-check.mjs    地图与 HUD 的验证（锚点三态 / 原石摩拉 / 图例形状 / 存档往返）
-    ├── model-shot.mjs  摄影棚模式角色特写渲染（六视角）
-    ├── flat-walk.mjs   平地直走贴地测试（区分"下坡腾空"与"真悬空"）
-    ├── diag-float.mjs  角色实际间隙 vs 解析高度 / 网格高度（射线检测）
-    ├── float-demo.mjs  冻结相机的修复前后对照图生成
-    ├── diag-height.mjs 网格中点插值误差（衡量地形细节是否被采样不足）
-    ├── diag-rock.mjs   岩石几何体水密性（边界边计数）
-    ├── diag-prop-size.mjs  散布物在世界空间的实测尺寸
-    ├── diag-who.mjs    屏幕射线命中物点名（父链 / 几何体 / 材质）
-    ├── probe-dot.mjs / isolate-dot.mjs / probe-pixel2.mjs  画面小瑕疵的隔离定位
-    ├── diag-report.mjs 视野锥方向 vs 相机真实朝向
-    ├── diag-close.mjs  镜头被地形顶住时的角色可见性
-    ├── gradient.mjs    地形坡度分布与卡死率统计
-    ├── diag.mjs        运行时状态采样
-    ├── profile.mjs     分帧耗时分析
-    ├── shots/          run.mjs 的世界内实拍截图
-    ├── verify/         verify.mjs + model-shot.mjs 的验证截图
-    └── artifact/       对照图产物（修复前后 A/B）
+└── _test/                开发期自动化测试与截图（可整个删除，不影响游戏）
+    │
+    ├─ 测试运行器与回归
+    │   ├── with-server.mjs    通用运行器：自带临时静态服务，跑完即关
+    │   ├── run.mjs            端到端跑图测试（自动截图）
+    │   ├── verify.mjs         物理回归：方向 / 防卡 / 穿模 / 贴地 / 模型
+    │   ├── ui-check.mjs       地图与 HUD 回归（26 项断言）
+    │   ├── map-res.mjs        世界地图分辨率与尺寸回归（13 项断言）
+    │   └── smoke.mjs          冒烟：加载耗时 / draw call / 报错数
+    │
+    ├─ 性能与几何
+    │   ├── bench-map.mjs      世界地图生成耗时 vs 采样分辨率
+    │   ├── profile.mjs        分帧耗时分析
+    │   ├── gradient.mjs       地形坡度分布与卡死率统计
+    │   └── diag-rock.mjs      岩石几何体水密性（边界边计数）
+    │
+    ├─ 诊断（"看起来不对" → 变成数字）
+    │   ├── diag-float.mjs     角色间隙 vs 解析高度 / 网格高度（射线检测）
+    │   ├── diag-height.mjs    网格中点插值误差
+    │   ├── diag-map-rings.mjs 地图纹理分层（高度 / 配色 / 阴影 各导一张图）
+    │   ├── diag-biome.mjs / diag-prop-size.mjs   群系占比 / 散布物实测尺寸
+    │   ├── diag-who.mjs       屏幕射线命中物点名（父链 / 几何体 / 材质）
+    │   └── diag-report.mjs    视野锥方向 vs 相机真实朝向
+    │
+    ├─ 截图与对照图生成
+    │   ├── model-shot.mjs     摄影棚模式角色特写（六视角）
+    │   ├── flat-walk.mjs      平地直走贴地测试（区分"下坡腾空"与"真悬空"）
+    │   ├── float-demo.mjs     冻结相机的修复前后对照
+    │   ├── scenic-shot.mjs / day-shot.mjs / final-shot.mjs / map-final-shot.mjs
+    │   └── make-*.py          报告拼图（PIL）：float / ui / sweep / map 四份
+    │
+    └─ 产物目录（.gitignore，可删可重新生成）
+        ├── shots/         run.mjs 的世界内实拍
+        ├── verify/        verify / ui-check / map-res 的验证图与报告
+        ├── artifact/      修复前后 A/B 对照图
+        ├── screenshots/   阶段性存档
+        └── occl/          遮挡诊断中间产物
 ```
+
+> `_test/` 里的脚本会调用 `<项目>/libs` 之外的东西：Playwright 的 Chromium。
+> 没装也能跑游戏，只是跑不了这些测试。常用命令：
+>
+> ```bash
+> node _test/with-server.mjs _test/verify.mjs    # 物理回归
+> node _test/ui-check.mjs                        # UI 回归（自带临时服务）
+> node _test/map-res.mjs                         # 地图回归
+> ```
 
 ---
 
