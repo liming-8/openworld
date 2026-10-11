@@ -1,0 +1,10 @@
+{
+  "name": "aether-wilds",
+  "version": "1.0.0",
+  "description": "万象原野 — 浏览器开放世界探索游戏",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "npx --yes serve -l 5173 ."
+  }
+}

@@ -1,0 +1,28 @@
+# ---------------- 依赖 ----------------
+node_modules/
+
+# ---------------- 测试产出的图片 / 报告 ----------------
+# 这些都能由 _test/ 下的脚本重新生成，不进版本库：
+#   _test/*.mjs            截图 / 验证脚本（保留）
+#   _test/make-*.py        报告拼图脚本（保留）
+# 生成方式见 README 第十三节，例如：
+#   node _test/with-server.mjs _test/verify.mjs
+#   node _test/map-res.mjs
+_test/verify/
+_test/artifact/
+_test/screenshots/
+_test/shots/
+_test/occl/
+
+# ---------------- 编辑器 / 系统 ----------------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------------- 杂项 ----------------
+*.log
+npm-debug.log*
+.env
+.env.local

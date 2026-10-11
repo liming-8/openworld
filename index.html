@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#eaf3f7" />
+<title>万象原野 · Aether Wilds — 开放世界探索</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2312897f'/%3E%3Cpath d='M32 12 L46 34 H38 L46 52 H18 L26 34 H18 Z' fill='%23d8f2ee'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="./css/style.css" />
+<script type="importmap">
+{
+  "imports": {
+    "three": "./libs/three.module.js"
+  }
+}
+</script>
+</head>
+<body>
+<div id="app">
+  <canvas id="game" data-ui="1"></canvas>
+
+  <!-- ==================== HUD ==================== -->
+  <div id="hud" class="hidden">
+    <!-- 左上：状态 -->
+    <div class="panel status-panel" data-ui="1">
+      <div class="avatar">
+        <div class="avatar-inner">旅</div>
+        <div class="level-badge"><span id="lv-text">Lv.1</span></div>
+      </div>
+      <div class="bars">
+        <div class="bar-row">
+          <span class="bar-label">生命</span>
+          <div class="bar"><i id="bar-hp" class="fill hp"></i><span id="hp-text" class="bar-text">100 / 100</span></div>
+        </div>
+        <div class="bar-row">
+          <span class="bar-label">体力</span>
+          <div class="bar"><i id="bar-sp" class="fill sp"></i><span id="sp-text" class="bar-text">100 / 100</span></div>
+        </div>
+        <div class="bar-row">
+          <span class="bar-label">经验</span>
+          <div class="bar slim"><i id="bar-xp" class="fill xp"></i><span id="xp-text" class="bar-text">0 / 100</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右上：小地图 -->
+    <div class="panel map-panel" data-ui="1">
+      <div class="map-head">
+        <span id="biome-name">风起平原</span>
+        <span id="clock" class="clock">06:20</span>
+      </div>
+      <div class="minimap-wrap">
+        <canvas id="minimap" width="220" height="220"></canvas>
+        <div class="compass" id="compass">
+          <span class="c n">北</span><span class="c e">东</span><span class="c s">南</span><span class="c w">西</span>
+        </div>
+      </div>
+      <div class="map-foot">
+        <span id="coord">X 0 &nbsp; Y 0 &nbsp; Z 0</span>
+        <span id="map-zoom" class="zoom-tag">缩放 1×</span>
+      </div>
+    </div>
+
+    <!-- 左下：目标与收集 -->
+    <div class="panel quest-panel" data-ui="1">
+      <div class="quest-title">探索目标</div>
+      <ul class="quest-list">
+        <li><i class="ico orb-ico"></i><span>风之瞳</span><b id="q-orb">0</b></li>
+        <li><i class="ico chest-ico"></i><span>宝箱</span><b id="q-chest">0</b></li>
+        <li><i class="ico way-ico"></i><span>传送锚点</span><b id="q-way">0</b></li>
+      </ul>
+      <div class="travel">
+        <span>已探索</span><b id="q-dist">0 m</b>
+      </div>
+      <div class="quest-title loot-title">收集物</div>
+      <ul class="quest-list">
+        <li><i class="ico gem-ico"></i><span>原石</span><b id="q-gem">0</b></li>
+        <li><i class="ico mora-ico"></i><span>摩拉</span><b id="q-mora">0</b></li>
+      </ul>
+      <div class="region-list" id="region-list"></div>
+    </div>
+
+    <!-- 底部中：交互提示 -->
+    <div id="interact" class="interact hidden" data-ui="1">
+      <span class="key">E</span><span id="interact-text">打开宝箱</span>
+    </div>
+
+    <!-- 状态标签（速度/状态） -->
+    <div class="state-tag" id="state-tag"></div>
+
+    <!-- 准星 -->
+    <div class="crosshair" id="crosshair"><i></i></div>
+
+    <!-- 移动端按钮 -->
+    <div class="touch-controls hidden" id="touch-controls" data-ui="1">
+      <div class="stick-base" id="stick-base"><div class="stick-knob" id="stick-knob"></div></div>
+      <div class="touch-btns">
+        <button class="tbtn" id="tb-glide">滑翔</button>
+        <button class="tbtn big" id="tb-jump">跳跃</button>
+        <button class="tbtn" id="tb-sprint">冲刺</button>
+        <button class="tbtn" id="tb-interact">互动</button>
+      </div>
+    </div>
+
+    <div id="toasts" class="toasts"></div>
+    <div id="hint-bar" class="hint-bar"></div>
+  </div>
+
+  <!-- ==================== 加载页 ==================== -->
+  <div id="loading" class="overlay loading">
+    <div class="load-box">
+      <div class="logo">万象原野</div>
+      <div class="logo-sub">AETHER WILDS</div>
+      <div class="load-track"><i id="load-fill"></i></div>
+      <div class="load-text" id="load-text">正在生成世界…</div>
+    </div>
+  </div>
+
+  <!-- ==================== 主菜单 ==================== -->
+  <div id="menu-start" class="overlay menu hidden">
+    <div class="menu-card wide">
+      <div class="logo">万象原野</div>
+      <div class="logo-sub">AETHER WILDS · 开放世界探索</div>
+      <p class="tagline">一片由算法生长出的无垠大地。奔跑、攀爬、滑翔，去收集散落的风之瞳。</p>
+      <div class="menu-actions">
+        <button class="btn primary" id="btn-new">开始新旅程</button>
+        <button class="btn" id="btn-continue">继续旅程</button>
+        <button class="btn" id="btn-settings">设置</button>
+        <button class="btn" id="btn-help">操作说明</button>
+      </div>
+      <div class="save-info" id="save-info"></div>
+    </div>
+  </div>
+
+  <!-- ==================== 暂停菜单 ==================== -->
+  <div id="menu-pause" class="overlay menu hidden">
+    <div class="menu-card">
+      <h2>暂停</h2>
+      <div class="menu-actions">
+        <button class="btn primary" id="btn-resume">继续探索</button>
+        <button class="btn" id="btn-map">打开地图 (M)</button>
+        <button class="btn" id="btn-pause-settings">设置</button>
+        <button class="btn" id="btn-pause-help">操作说明</button>
+        <button class="btn" id="btn-save">保存进度</button>
+        <button class="btn danger" id="btn-quit">返回主菜单</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 设置 ==================== -->
+  <div id="menu-settings" class="overlay menu hidden">
+    <div class="menu-card">
+      <h2>设置</h2>
+      <div class="setting-row">
+        <label>画质档位</label>
+        <div class="seg" id="seg-quality">
+          <button data-q="低">低</button><button data-q="中" class="on">中</button>
+          <button data-q="高">高</button><button data-q="极致">极致</button>
+        </div>
+      </div>
+      <div class="setting-row"><label>鼠标灵敏度</label><input type="range" id="set-sens" min="20" max="300" value="100" /><span id="set-sens-v">100%</span></div>
+      <div class="setting-row"><label>视野 (FOV)</label><input type="range" id="set-fov" min="60" max="100" value="76" /><span id="set-fov-v">76</span></div>
+      <div class="setting-row"><label>总音量</label><input type="range" id="set-vol" min="0" max="100" value="60" /><span id="set-vol-v">60</span></div>
+      <div class="setting-row"><label>音效</label><input type="range" id="set-sfx" min="0" max="100" value="80" /><span id="set-sfx-v">80</span></div>
+      <div class="setting-row"><label>环境音</label><input type="range" id="set-amb" min="0" max="100" value="50" /><span id="set-amb-v">50</span></div>
+      <div class="setting-row"><label>光影阴影</label><label class="switch"><input type="checkbox" id="set-shadow" checked /><i></i></label></div>
+      <div class="setting-row"><label>时间流速</label><input type="range" id="set-daylen" min="60" max="1800" step="30" value="480" /><span id="set-daylen-v">480s</span></div>
+      <div class="setting-row"><label>垂直视角反向</label><label class="switch"><input type="checkbox" id="set-invert" /><i></i></label></div>
+      <div class="menu-actions">
+        <button class="btn primary" id="btn-settings-close">返回</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 帮助 ==================== -->
+  <div id="menu-help" class="overlay menu hidden">
+    <div class="menu-card wide">
+      <h2>操作说明</h2>
+      <div class="help-grid">
+        <div class="help-col">
+          <h3>移动</h3>
+          <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 奔跑（默认自动奔跑）</p>
+          <p><kbd>Shift</kbd> 冲刺（消耗体力）</p>
+          <p><kbd>Space</kbd> 跳跃</p>
+          <p><kbd>Space</kbd> 长按（空中）滑翔</p>
+          <p><kbd>鼠标</kbd> 转动视角 · <kbd>滚轮</kbd> 拉近拉远</p>
+          <p><kbd>C</kbd> 切换第一 / 第三人称</p>
+        </div>
+        <div class="help-col">
+          <h3>探索</h3>
+          <p><kbd>E</kbd> 交互（开箱 / 收集 / 锚点 / 篝火）</p>
+          <p><kbd>F</kbd> 点亮 / 熄灭提灯</p>
+          <p><kbd>M</kbd> 打开世界地图（可点击已激活锚点传送）</p>
+          <p><kbd>N</kbd> 切换小地图缩放</p>
+          <p><kbd>T</kbd> 切换时间（白天 / 夜晚）</p>
+          <p><kbd>H</kbd> 隐藏 / 显示界面</p>
+          <p><kbd>Esc</kbd> 暂停</p>
+        </div>
+      </div>
+      <div class="tip-box">
+        <b>探索提示</b>
+        <span>体力耗尽会无法冲刺与滑翔；在水中游泳同样消耗体力，记得回到篝火旁休整。</span>
+      </div>
+      <div class="menu-actions">
+        <button class="btn primary" id="btn-help-close">返回</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 世界地图 ==================== -->
+  <div id="menu-map" class="overlay map-overlay hidden">
+    <div class="map-card">
+      <div class="map-card-head">
+        <h2>世界地图</h2>
+        <span id="map-hint">实心锚点可点击传送　·　空心锚点尚未激活，需走过去按 E 点亮</span>
+        <button class="btn small" id="btn-map-close">关闭 (M)</button>
+      </div>
+      <canvas id="bigmap" width="1024" height="1024"></canvas>
+      <div class="map-legend">
+        <span><i class="lg orb"></i>风之瞳</span>
+        <span><i class="lg chest"></i>宝箱</span>
+        <span><i class="lg way"></i>传送锚点 · 可传送</span>
+        <span><i class="lg way-off"></i>锚点 · 未激活</span>
+        <span><i class="lg you"></i>当前位置</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="./js/main.js"></script>
+</body>
+</html>
