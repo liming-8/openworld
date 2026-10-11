@@ -300,6 +300,13 @@ html, body {
 .btn.danger { color: var(--danger); border-color: rgba(201,83,74,.35); background: #fdf2f1; }
 .btn.small { padding: 7px 12px; font-size: 12px; border-radius: 9px; }
 .save-info { text-align: center; font-size: 11px; color: var(--text-dim); margin-top: 14px; min-height: 14px; }
+/* 「开启新旅程」的覆盖确认：把要丢掉的东西一条条列清楚，别只写"确定吗？" */
+.confirm-text {
+  font-size: 12.5px; line-height: 1.85; color: var(--text-dim);
+  background: #fbf4f3; border: 1px solid rgba(201, 83, 74, .22);
+  border-radius: 12px; padding: 12px 14px;
+}
+.confirm-text b { color: var(--danger); font-variant-numeric: tabular-nums; }
 
 /* ==================== 设置控件 ==================== */
 .setting-row {

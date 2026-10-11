@@ -199,6 +199,10 @@ try {
   const page2 = await browser.newPage({ viewport: VIEW, deviceScaleFactor: 2 });
   await page2.goto(`${BASE}/index.html`, { waitUntil: 'domcontentloaded' });
   await page2.waitForFunction(() => document.getElementById('loading').classList.contains('hidden'), { timeout: 120000, polling: 400 });
+  // 同一个浏览器上下文 = 共用 localStorage。上面那页已经跑了一会儿、
+  // 多半已经自动存过档；不清掉的话点「开始新旅程」会弹覆盖确认框，
+  // 游戏根本不会开始。这里只想量 DPR 下的标记像素，清空最省事。
+  await page2.evaluate(() => localStorage.clear());
   await page2.click('#btn-new');
   await page2.waitForTimeout(2600);
   await page2.evaluate(() => { window.__game.toggleMap(true); });

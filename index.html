@@ -125,10 +125,24 @@
       <div class="menu-actions">
         <button class="btn primary" id="btn-new">开始新旅程</button>
         <button class="btn" id="btn-continue">继续旅程</button>
+        <!-- 只有在存在备份档（被"开始新旅程"覆盖过）时才显示 -->
+        <button class="btn hidden" id="btn-restore">恢复上一份存档</button>
         <button class="btn" id="btn-settings">设置</button>
         <button class="btn" id="btn-help">操作说明</button>
       </div>
       <div class="save-info" id="save-info"></div>
+    </div>
+  </div>
+
+  <!-- ==================== 新旅程覆盖确认 ==================== -->
+  <div id="menu-confirm" class="overlay menu hidden">
+    <div class="menu-card">
+      <h2>开启新旅程？</h2>
+      <p class="confirm-text" id="confirm-text"></p>
+      <div class="menu-actions">
+        <button class="btn danger" id="btn-confirm-yes">覆盖并开始新旅程</button>
+        <button class="btn primary" id="btn-confirm-no">取消</button>
+      </div>
     </div>
   </div>
 

@@ -29,8 +29,9 @@ export class UI {
       loading: this.$('loading'), loadFill: this.$('load-fill'), loadText: this.$('load-text'),
       menuStart: this.$('menu-start'), menuPause: this.$('menu-pause'),
       menuSettings: this.$('menu-settings'), menuHelp: this.$('menu-help'),
-      menuMap: this.$('menu-map'),
+      menuMap: this.$('menu-map'), menuConfirm: this.$('menu-confirm'),
       saveInfo: this.$('save-info'),
+      confirmText: this.$('confirm-text'),
       touch: this.$('touch-controls'),
       compass: this.$('compass'),
       crosshair: this.$('crosshair'),
@@ -104,6 +105,7 @@ export class UI {
     const map = {
       start: this.el.menuStart, pause: this.el.menuPause,
       settings: this.el.menuSettings, help: this.el.menuHelp, map: this.el.menuMap,
+      confirm: this.el.menuConfirm,
     };
     for (const [k, el] of Object.entries(map)) {
       if (!el) continue;

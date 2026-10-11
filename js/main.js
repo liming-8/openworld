@@ -17,6 +17,8 @@ import { clamp, lerp } from './noise.js';
 
 const SAVE_KEY = 'aether-wilds-save-v1';
 const SETTINGS_KEY = 'aether-wilds-settings-v1';
+/** 被「开始新旅程」覆盖掉的旧档会先复制到这个键，点错还能捞回来 */
+const SAVE_BAK_KEY = 'aether-wilds-save-v1.bak';
 
 class Game {
   constructor() {
@@ -159,18 +161,91 @@ class Game {
     } catch (e) { return null; }
   }
 
+  readBackup() {
+    try {
+      const raw = localStorage.getItem(SAVE_BAK_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) { return null; }
+  }
+
+  /**
+   * 把当前存档原样复制到备份位。
+   *
+   * 为什么要这个：整个游戏只有**一个**存档槽（`aether-wilds-save-v1`），
+   * 而自动存档每 25 秒、暂停、关页面时都会无条件覆盖它。
+   * 所以"开始新旅程"一旦点下去，旧档不是被"删除"，而是几秒内就被新进度
+   * 静默写没了 —— 原本连一句确认都没有。现在覆盖前先留一份备份。
+   */
+  backupSave() {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) return false;
+      localStorage.setItem(SAVE_BAK_KEY, raw);
+      return true;
+    } catch (e) { return false; }
+  }
+
+  /**
+   * 把内存里的进度清空。
+   *
+   * ⚠️ 这里以前是漏做的：旧版 `startGame(false)` 只做了
+   *    `world.rebuild()` + `player.reset(出生点)`，
+   *    而 state / collectedSet / unlockedSet / waypointRegistry / ui.regions
+   *    一个都没动。于是"暂停 → 返回主菜单 → 开始新旅程"之后，
+   *    等级、原石、摩拉、已开的箱子、已点亮的锚点会**原封不动地跟过来**，
+   *    只是把你挪回出生点而已 —— 而且马上会被当成"新档"写回存档。
+   */
+  resetProgress() {
+    const st = this.state;
+    st.level = 1; st.xp = 0; st.xpNeed = 100;
+    st.orbs = 0; st.orbsTotal = 0;
+    st.chests = 0; st.chestsTotal = 0;
+    st.ways = 0; st.waysTotal = 0;
+    st.gems = 0; st.mora = 0;
+    st.distance = 0;
+    st.staminaMax = PLAYER.staminaMax;
+    st.playtime = 0;
+    this.collectedSet = new Set();
+    this.unlockedSet = new Set();
+    this.waypointRegistry = new Map();
+    this.despawnAll();
+    this.ui.regions.clear();
+    this.player.health = 100;
+    this.player.stamina = st.staminaMax;
+    this.player.lanternOn = false;
+  }
+
+  /** 把场景里所有地标实例（宝箱 / 风之瞳 / 传送锚点）摘干净 */
+  despawnAll() {
+    for (const obj of this.objects.values()) {
+      if (obj.group) this.scene.remove(obj.group);
+    }
+    this.objects.clear();
+    this.regionObjects.clear();
+  }
+
   prepareStartMenu(save) {
     const info = this.ui.el.saveInfo;
+    const bc = document.getElementById('btn-continue');
     if (save) {
       const d = save.playtime ? `${Math.floor(save.playtime / 60)} 分钟` : '—';
       info.textContent = `已有存档 · Lv.${save.level || 1} · 风之瞳 ${save.orbs || 0} · 原石 ${save.gems || 0} · 摩拉 ${save.mora || 0} · 已探索 ${Math.round(save.distance || 0)} m · 游玩 ${d}`;
-      const bc = document.getElementById('btn-continue');
       bc.disabled = false; bc.style.opacity = ''; bc.style.cursor = '';
     } else {
       info.textContent = '暂无存档，开始一段新的旅程吧';
-      document.getElementById('btn-continue').disabled = true;
-      document.getElementById('btn-continue').style.opacity = '.45';
-      document.getElementById('btn-continue').style.cursor = 'not-allowed';
+      bc.disabled = true;
+      bc.style.opacity = '.45';
+      bc.style.cursor = 'not-allowed';
+    }
+    // 有备份档才显示"恢复"入口，并把它自己的进度写在按钮上
+    const br = document.getElementById('btn-restore');
+    const bak = this.readBackup();
+    if (bak) {
+      const db = bak.playtime ? `${Math.floor(bak.playtime / 60)} 分钟` : '—';
+      br.textContent = `恢复上一份存档（Lv.${bak.level || 1} · 风之瞳 ${bak.orbs || 0} · 游玩 ${db}）`;
+      br.classList.remove('hidden');
+    } else {
+      br.classList.add('hidden');
     }
     this.ui.showMenu('start');
   }
@@ -268,8 +343,11 @@ class Game {
     const click = (id, fn) => { const el = $(id); if (el) el.addEventListener('click', () => { this.audio.play('ui'); fn(); }); };
 
     // 主菜单
-    click('btn-new', () => this.startGame(false));
+    click('btn-new', () => this.requestNewGame());
     click('btn-continue', () => this.startGame(true));
+    click('btn-restore', () => this.restoreBackup());
+    click('btn-confirm-yes', () => this.confirmNewGame());
+    click('btn-confirm-no', () => this.cancelNewGame());
     click('btn-settings', () => this.ui.showMenu('settings'));
     click('btn-help', () => this.ui.showMenu('help'));
     click('btn-resume', () => this.resume());
@@ -295,7 +373,13 @@ class Game {
 
     // 键盘
     window.addEventListener('keydown', (e) => {
-      if (!this.state.started) return;
+      if (!this.state.started) {
+        // 还在标题界面：让"新旅程"确认框也吃 Esc，免得只能去点取消
+        const confirmOpen = this.ui.el.menuConfirm
+          && !this.ui.el.menuConfirm.classList.contains('hidden');
+        if (e.code === 'Escape' && confirmOpen) this.cancelNewGame();
+        return;
+      }
       const settingsOpen = !this.ui.el.menuSettings.classList.contains('hidden');
       const helpOpen = !this.ui.el.menuHelp.classList.contains('hidden');
       if (e.code === 'Escape') {
@@ -422,11 +506,53 @@ class Game {
   }
 
   /* ==================== 开始 / 暂停 ==================== */
+
+  /**
+   * 「开始新旅程」的入口。
+   * 有存档就先弹确认框 —— 把即将被覆盖的内容列清楚，而不是闷头开新档。
+   */
+  requestNewGame() {
+    const save = this.readSave();
+    if (!save) { this.startGame(false); return; }
+    const d = save.playtime ? `${Math.floor(save.playtime / 60)} 分钟` : '—';
+    this.ui.el.confirmText.innerHTML =
+      '即将被覆盖的存档：<br>'
+      + `Lv.<b>${save.level || 1}</b> · 风之瞳 <b>${save.orbs || 0}</b> · 宝箱 <b>${save.chests || 0}</b>`
+      + ` · 传送锚点 <b>${save.ways || 0}</b> · 原石 <b>${save.gems || 0}</b> · 摩拉 <b>${save.mora || 0}</b><br>`
+      + `已探索 <b>${Math.round(save.distance || 0)} m</b> · 游玩 <b>${d}</b><br><br>`
+      + '本作只有<b>一个存档槽</b>，新旅程开始后自动存档（每 25 秒 / 暂停 / 关闭页面）'
+      + '会在几秒内把这份进度覆盖掉。<br>'
+      + '确认后会先自动备份一份，之后可在主菜单用「恢复上一份存档」找回。';
+    this.ui.showMenu('confirm');
+  }
+
+  confirmNewGame() {
+    this.backupSave();
+    this.startGame(false);
+    this.ui.toast('已开启新旅程 · 旧存档已备份', 'gold', 3400);
+  }
+
+  cancelNewGame() {
+    this.prepareStartMenu(this.readSave());
+  }
+
+  /** 把备份档写回存档槽并直接进入游戏 */
+  restoreBackup() {
+    const bak = this.readBackup();
+    if (!bak) { this.ui.toast('没有可恢复的备份存档'); return; }
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(bak)); } catch (e) { /* ignore */ }
+    this.startGame(true);
+    this.ui.toast('已恢复备份存档', 'gold', 3200);
+  }
+
   startGame(continueSave) {
     this.audio.start();
     const save = continueSave ? this.readSave() : null;
     if (save) this.applySave(save);
     else {
+      // ⚠️ 必须先把内存进度清干净再重建世界，
+      //    否则"从暂停菜单返回主菜单 → 开始新旅程"会把旧进度带进新档。
+      this.resetProgress();
       this.world.rebuild();
       this.player.reset(this.spawnPoint.x, this.spawnPoint.y + 1.2, this.spawnPoint.z);
       this.sky.setTime(0.34);
